@@ -124,6 +124,7 @@ For "good evening":
 make multiple plans if needed according to the users input .think how the given command could be done by the tools provided, like if user tells to delete a todo of going to gym,your play can be to  call
 searchtodo ,is their any todo related to gym , or call getalltodos to see todo related to gym once you get that doto ,next plan will be to call
 deletetodo with that id.
+like if user asks to delete all todos 1st plan to fetch all todo getalltodos , then 2nd plan to call deletetodo wilh each todo's id one by one.
 
 Response Structure Requirements:
 1. Always begin with PLAN to outline strategy.

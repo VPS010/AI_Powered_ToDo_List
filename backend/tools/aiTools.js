@@ -4,7 +4,7 @@ const { ObjectId } = require('mongodb');
 const getalltodos = async (args = {}) => {
     try {
         console.log("Fetching all todos");
-        const todos = await todo.find({});
+        const todos = await todo.find({}).lean(); // Convert to plain objects
         console.log("Todos found:", todos);
         return {
             status: "success",
@@ -26,7 +26,7 @@ const createtodo = async ({ todoText }) => {
         });
         return {
             status: "success",
-            data: newtodo._id
+            data: newtodo._id.toString() // Convert ObjectId to string
         };
     } catch (error) {
         return {
@@ -39,10 +39,19 @@ const createtodo = async ({ todoText }) => {
 const searchtodo = async ({ search }) => {
     try {
         const regex = new RegExp(search, "i");
-        const searchedTodo = await todo.findOne({ task: { $regex: regex } });
+        const searchedTodo = await todo.findOne({ task: { $regex: regex } }).lean();
+        if (!searchedTodo) {
+            return {
+                status: "error",
+                message: "Todo not found"
+            };
+        }
         return {
             status: "success",
-            data: searchedTodo
+            data: {
+                ...searchedTodo,
+                _id: searchedTodo._id.toString() // Ensure ID is a string
+            }
         };
     } catch (error) {
         return {
@@ -54,20 +63,32 @@ const searchtodo = async ({ search }) => {
 
 const deletetodo = async ({ id }) => {
     try {
-        // Ensure the id is a valid MongoDB ObjectId
-        const validId = id instanceof ObjectId ? id : new ObjectId(id);
+        if (!id) {
+            return {
+                status: "error",
+                message: "No ID provided"
+            };
+        }
 
-        const deletedTodo = await todo.findByIdAndDelete(validId);
+        if (!ObjectId.isValid(id)) {
+            return {
+                status: "error",
+                message: "Invalid Todo ID format"
+            };
+        }
+
+        const deletedTodo = await todo.findByIdAndDelete(id);
         if (!deletedTodo) {
             return {
                 status: "error",
                 message: "Todo not found"
             };
         }
+
         return {
             status: "success",
             message: "Todo deleted successfully",
-            data: deletedTodo._id
+            data: deletedTodo._id.toString()
         };
     } catch (error) {
         return {
@@ -76,4 +97,5 @@ const deletetodo = async ({ id }) => {
         };
     }
 };
+
 module.exports = { getalltodos, createtodo, searchtodo, deletetodo };

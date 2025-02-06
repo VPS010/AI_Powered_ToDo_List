@@ -151,54 +151,52 @@ class TodoAIChat {
             throw error;
         }
     }
+ // In TodoAIChat class, modify processResponse method:
 
-    async processResponse(chat, response) {
-        if (!response.candidates?.[0]?.content?.parts) return;
+async processResponse(chat, response) {
+    if (!response.candidates?.[0]?.content?.parts) return;
 
-        for (const part of response.candidates[0].content.parts) {
-            try {
-                if (part.text) {
-                    const parsedResponses = this.parseResponse(part.text);
-                    const responsesArray = Array.isArray(parsedResponses) ? parsedResponses : [parsedResponses];
+    for (const part of response.candidates[0].content.parts) {
+        try {
+            if (part.text) {
+                const parsedResponses = this.parseResponse(part.text);
+                const responsesArray = Array.isArray(parsedResponses) ? parsedResponses : [parsedResponses];
 
-                    for (const parsed of responsesArray) {
-                        if (parsed.type === 'action' && parsed.content.tool) {
-                            console.log("Detected action:", parsed.content.tool);
-                            const result = await todoTools[parsed.content.tool](parsed.content.parameters || {});
-                            console.log("Tool result:", result);
+                for (const parsed of responsesArray) {
+                    if (parsed.type === 'action' && parsed.content.tool) {
+                        console.log("Detected action:", parsed.content.tool);
+                        const result = await todoTools[parsed.content.tool](parsed.content.parameters || {});
+                        console.log("Tool result:", result);
 
-                            // Prepare response based on the tool
-                            let responseText;
-                            if (parsed.content.tool === 'createtodo') {
-                                responseText = JSON.stringify({
-                                    type: "output",
-                                    content: {
-                                        message: `Todo added successfully with ID: ${result.data}`
-                                    }
-                                });
-                            } else if (parsed.content.tool === 'getalltodos') {
-                                responseText = JSON.stringify({
+                        if (parsed.content.tool === 'searchtodo' && result.status === 'success') {
+                            await chat.sendMessage({
+                                parts: [{ text: JSON.stringify({
                                     type: "observation",
-                                    content: {
-                                        result: result.data.map(todo => todo.task)
-                                    }
-                                });
-                            }
-
-                            // Send the prepared response
-                            if (responseText) {
-                                await chat.sendMessage({ text: responseText });
-                            }
+                                    content: { id: result.data._id, result: result.data }
+                                })}]
+                            });
                         }
 
-                        await this.handleResponseTypes(parsed);
+                        if (parsed.content.tool === 'deletetodo') {
+                            const deleteResult = await todoTools.deletetodo({ 
+                                id: result.data._id 
+                            });
+                            await chat.sendMessage({
+                                parts: [{ text: JSON.stringify({
+                                    type: "observation",
+                                    content: { message: deleteResult.message }
+                                })}]
+                            });
+                        }
                     }
+                    await this.handleResponseTypes(parsed);
                 }
-            } catch (error) {
-                console.error("🚨 Response Processing Error:", error);
             }
+        } catch (error) {
+            console.error("🚨 Response Processing Error:", error);
         }
     }
+}
 
     parseResponse(text) {
         try {
