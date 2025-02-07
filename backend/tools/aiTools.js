@@ -98,4 +98,54 @@ const deletetodo = async ({ id }) => {
     }
 };
 
-module.exports = { getalltodos, createtodo, searchtodo, deletetodo };
+const toggletodo = async ({ id }) => {
+    try {
+        if (!id) {
+            return {
+                status: "error",
+                message: "No ID provided"
+            };
+        }
+
+        if (!ObjectId.isValid(id)) {
+            return {
+                status: "error",
+                message: "Invalid Todo ID format"
+            };
+        }
+
+        // Find the todo by ID
+        const todoItem = await todo.findById(id);
+        if (!todoItem) {
+            return {
+                status: "error",
+                message: "Todo not found"
+            };
+        }
+
+        // Toggle 'done' status
+        todoItem.done = !todoItem.done;
+        todoItem.updatedAt = new Date(); // Update timestamp
+        await todoItem.save();
+
+        return {
+            status: "success",
+            message: "Todo status updated",
+            data: {
+                id: todoItem._id.toString(),
+                task: todoItem.task,
+                done: todoItem.done
+            }
+        };
+    } catch (error) {
+        return {
+            status: "error",
+            message: error.message
+        };
+    }
+};
+
+
+
+
+module.exports = { getalltodos, createtodo, searchtodo, deletetodo, toggletodo };

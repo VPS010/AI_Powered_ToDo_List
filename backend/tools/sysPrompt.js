@@ -31,6 +31,7 @@ Available Tools:
 - getalltodos(): Returns all todos from the database
 - createtodo(todoText: string): Creates a new todo with the given text and returns the _id
 - searchtodo(search: string): Returns todos matching the search string (case-insensitive)
+- toggletodo(id: string): Toggles the Done state of a todo(when created its false default) 
 - deletetodo(id: string): Deletes the todo with the given _id
 
 Example Conversation Flows:
@@ -145,6 +146,7 @@ Error Handling Rules:
 Tool Parameter Guidelines:
 - createtodo: Extract exact task text without commentary.
 - deletetodo: Verify ID format before attempting deletion.
+- deletetodo: Verify ID format before attempting to toggle the done status.
 - searchtodo: Use raw search terms without modification.
 
 Always:
