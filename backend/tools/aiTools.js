@@ -1,19 +1,26 @@
 const { todo } = require("../db/modle");
 const { ObjectId } = require('mongodb');
 
-const getalltodos = async (args = {}) => {
+const getalltodos = async () => {
     try {
         console.log("Fetching all todos");
-        const todos = await todo.find({}).lean(); // Convert to plain objects
-        console.log("Todos found:", todos);
+        const todos = await todo.find({})
+            .lean({ virtuals: true })  // Enable virtuals
+            .setOptions({ sanitizeFilter: true })
+            .exec();
+
         return {
-            status: "success",
-            data: todos
+            status: 'success',
+            data: todos.map(t => ({
+                ...t,
+                createdAt: t.createdAt,
+                updatedAt: t.updatedAt
+            }))
         };
     } catch (error) {
         console.error("Error fetching todos:", error);
         return {
-            status: "error",
+            status: 'error',
             message: error.message
         };
     }
@@ -21,16 +28,24 @@ const getalltodos = async (args = {}) => {
 
 const createtodo = async ({ todoText }) => {
     try {
+        if (!todoText) throw new Error("Missing todoText parameter");
+
         const newtodo = await todo.create({
             task: todoText
         });
+
+        // Return simplified response
         return {
-            status: "success",
-            data: newtodo._id.toString() // Convert ObjectId to string
+            status: 'success',
+            data: {
+                id: newtodo._id.toString(),
+                task: newtodo.task,
+                done: newtodo.done
+            }
         };
     } catch (error) {
         return {
-            status: "error",
+            status: 'error',
             message: error.message
         };
     }

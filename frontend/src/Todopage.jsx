@@ -1,17 +1,18 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Send,
   Trash2,
-  Search,
   CheckCircle,
   Circle,
   Bot,
   User,
-  Sparkles,
   Zap,
-  SmilePlus,
-  Ghost,
+  Sparkles,
 } from "lucide-react";
+import axios from "axios";
+import io from "socket.io-client";
+
+const socket = io("http://localhost:3000");
 
 const TodoChatApp = () => {
   const [messages, setMessages] = useState([]);
@@ -20,117 +21,100 @@ const TodoChatApp = () => {
   const [loading, setLoading] = useState(false);
   const chatEndRef = useRef(null);
 
-  const scrollToBottom = () => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
-
   useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+    fetchTodos();
 
-  const sarcasticResponses = {
-    add: [
-      (task) => `Another task? *sigh* Added "${task}" to your endless list`,
-      (task) => `Wow, groundbreaking: "${task}"... added.`,
-      (task) => `Sure thing boss, I'll prioritize "${task}" right after my nap`,
-    ],
-    delete: [
-      (task) => `Deleted "${task}". Was it too hard for you?`,
-      (task) => `Poof! "${task}" gone. Like your motivation`,
-      (task) => `Finally giving up on "${task}"? Smart move`,
-    ],
-    search: [
-      () => "Looking... just like you should be working",
-      () => "Searching... this better be important",
-      () => "Hold your horses, I'm not Google",
-    ],
-    default: [
-      () => "What now?",
-      () => "You're still here?",
-      () => "I get paid hourly for this, right?",
-    ],
+    socket.on("response", (response) => {
+      setMessages((prev) => [
+        ...prev,
+        {
+          type: "ai",
+          content: response.content.message,
+          timestamp: new Date().toLocaleTimeString(),
+        },
+      ]);
+      setLoading(false);
+
+      if (response.content.requiresUpdate) {
+        fetchTodos();
+      }
+    });
+
+    socket.on("todoUpdated", (updatedTodos) => {
+      setTodos(updatedTodos);
+    });
+
+    return () => {
+      socket.off("response");
+      socket.off("todoUpdated");
+    };
+  }, []);
+
+  const fetchTodos = async () => {
+    try {
+      const response = await axios.get("http://localhost:3000/todos");
+      setTodos(response.data);
+    } catch (error) {
+      console.error("Error fetching todos:", error);
+    }
   };
 
-  const getSarcasticResponse = (action, task = "") => {
-    const responses = sarcasticResponses[action] || sarcasticResponses.default;
-    return responses[Math.floor(Math.random() * responses.length)](task);
-  };
-
-  // Modified handleSend function
   const handleSend = async () => {
     if (!input.trim()) return;
 
     const userMessage = {
       type: "user",
       content: input,
+      timestamp: new Date().toLocaleTimeString(),
     };
+
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
     setLoading(true);
 
+    socket.emit("message", input);
+  };
+
+  const handleDelete = async (id) => {
     try {
-      setTimeout(() => {
-        const action = input.toLowerCase().includes("add")
-          ? "add"
-          : input.toLowerCase().includes("delete")
-          ? "delete"
-          : input.toLowerCase().includes("search")
-          ? "search"
-          : "list";
-
-        const responseContent =
-          action === "add"
-            ? getSarcasticResponse(action, input.replace("add", "").trim())
-            : getSarcasticResponse(action);
-
-        const aiMessage = {
-          type: "ai",
-          content: responseContent,
-          action: action,
-          emoji: ["🤖", "😒", "🙄", "😏"][Math.floor(Math.random() * 4)],
-        };
-
-        setMessages((prev) => [...prev, aiMessage]);
-
-        if (action === "add") {
-          setTodos((prev) => [
-            ...prev,
-            {
-              id: Date.now(),
-              text: input.replace("add", "").trim(),
-              done: false,
-              addedAt: new Date().toLocaleTimeString(),
-            },
-          ]);
-        }
-        setLoading(false);
-      }, 1000);
+      await axios.delete(`http://localhost:3000/delete/${id}`);
+      await fetchTodos();
     } catch (error) {
-      console.error("Error:", error);
-      setLoading(false);
+      console.error("Error deleting todo:", error);
     }
   };
 
+  const handleToggle = async (id) => {
+    try {
+      await axios.put(`http://localhost:3000/done/${id}`);
+      await fetchTodos();
+    } catch (error) {
+      console.error("Error toggling todo:", error);
+    }
+  };
   // Updated UI components with new theme
   return (
-    <div className="flex h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-purple-950 animate-gradient-x">
-      <div className="flex-1 flex p-6 gap-6">
+    <div className="flex h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-700">
+      <div className="flex-1 flex p-6 gap-6 relative">
         {/* Chat Section */}
-        <div className="flex-1 flex flex-col bg-gray-900/80 rounded-2xl overflow-hidden border-2 border-purple-500/30 backdrop-blur-lg">
-          <div className="p-4 bg-purple-900/50 border-b border-purple-500/30">
+        <div className="flex-1 flex flex-col bg-slate-800/90 rounded-2xl overflow-hidden border border-slate-600/50 backdrop-blur-lg shadow-xl">
+          <div className="p-4 bg-slate-700/50 border-b border-slate-600/50">
             <div className="flex items-center gap-3">
-              <Ghost className="text-pink-400 animate-float" size={28} />
-              <div>
-                <h2 className="text-xl font-bold bg-gradient-to-r from-pink-400 to-blue-400 bg-clip-text text-transparent">
-                  SassyTaskMaster 9000
-                </h2>
-                <p className="text-sm text-purple-300">Here to "help"</p>
+              <div className="p-2 rounded-lg bg-indigo-500/20 border border-indigo-400/30">
+                <Bot className="text-indigo-400" size={24} />
               </div>
-              <SmilePlus className="ml-auto text-yellow-400" size={20} />
+              <div>
+                <h2 className="text-xl font-semibold text-slate-100">
+                  TaskMaster AI
+                </h2>
+                <p className="text-sm text-slate-400">
+                  Expertly roasting your productivity since 2023
+                </p>
+              </div>
             </div>
           </div>
 
-          {/* Updated Chat Messages */}
+          {/* Chat Messages */}
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
             {messages.map((message, index) => (
               <div
@@ -145,37 +129,31 @@ const TodoChatApp = () => {
                   }`}
                 >
                   <div
-                    className={`w-10 h-10 rounded-full flex items-center justify-center 
-                    ${
+                    className={`w-9 h-9 rounded-full flex items-center justify-center transition-all ${
                       message.type === "user"
-                        ? "bg-pink-500/20 border-2 border-pink-400/50"
-                        : "bg-blue-500/20 border-2 border-blue-400/50"
+                        ? "bg-indigo-500/20 border border-indigo-400/30"
+                        : "bg-emerald-500/20 border border-emerald-400/30"
                     }`}
                   >
                     {message.type === "user" ? (
-                      <User size={20} className="text-pink-400" />
+                      <User size={18} className="text-indigo-400" />
                     ) : (
-                      <div className="relative">
-                        <Bot size={20} className="text-blue-400" />
-                        <span className="absolute -top-2 -right-2 text-lg">
-                          {message.emoji}
-                        </span>
-                      </div>
+                      <Bot size={18} className="text-emerald-400" />
                     )}
                   </div>
                   <div
-                    className={`rounded-2xl p-4 ${
+                    className={`rounded-xl p-3 transition-all ${
                       message.type === "user"
-                        ? "bg-pink-500/20 text-pink-100 border-2 border-pink-400/30"
-                        : "bg-blue-500/20 text-blue-100 border-2 border-blue-400/30"
-                    } shadow-lg hover:shadow-xl transition-shadow`}
+                        ? "bg-indigo-500/20 border border-indigo-400/30"
+                        : "bg-emerald-500/20 border border-emerald-400/30"
+                    } hover:bg-opacity-30`}
                   >
-                    <p className="text-sm font-medium">{message.content}</p>
+                    <p className="text-sm text-slate-200">{message.content}</p>
                     {message.type === "ai" && (
-                      <div className="mt-2 flex items-center gap-2 text-blue-200">
+                      <div className="mt-2 flex items-center gap-2 text-emerald-400/80">
                         <Zap size={14} className="animate-pulse" />
                         <span className="text-xs">
-                          Sass Level: {Math.floor(Math.random() * 100)}%
+                          Motivation Level: {Math.floor(Math.random() * 100)}%
                         </span>
                       </div>
                     )}
@@ -183,33 +161,12 @@ const TodoChatApp = () => {
                 </div>
               </div>
             ))}
-            {/* Loading animation updated */}
-            {loading && (
-              <div className="flex justify-start">
-                <div className="flex items-start gap-3">
-                  <div className="w-10 h-10 rounded-full bg-blue-500/20 border-2 border-blue-400/50 flex items-center justify-center">
-                    <Bot size={20} className="text-blue-400" />
-                  </div>
-                  <div className="bg-blue-500/20 rounded-2xl p-4 border-2 border-blue-400/30">
-                    <div className="flex space-x-2 items-center">
-                      <span className="text-sm text-blue-200">
-                        Generating sarcasm
-                      </span>
-                      <div className="flex space-x-1">
-                        <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" />
-                        <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce delay-100" />
-                        <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce delay-200" />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
+            {/* Loading indicator remains similar */}
             <div ref={chatEndRef} />
           </div>
 
-          {/* Updated Input Area */}
-          <div className="p-4 bg-purple-900/50 border-t border-purple-500/30">
+          {/* Input Area */}
+          <div className="p-4 bg-slate-700/50 border-t border-slate-600/50">
             <div className="flex gap-3">
               <div className="flex-1 relative">
                 <input
@@ -217,17 +174,17 @@ const TodoChatApp = () => {
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyPress={(e) => e.key === "Enter" && handleSend()}
-                  placeholder="What impossible task shall we add today?"
-                  className="w-full bg-purple-900/30 text-purple-100 rounded-xl px-4 py-3 pr-12 border-2 border-purple-500/30 focus:outline-none focus:border-pink-400 placeholder-purple-400/70 shadow-inner"
+                  placeholder="What's your next brilliant idea?"
+                  className="w-full bg-slate-600/20 text-slate-200 rounded-lg px-4 py-3 pr-12 border border-slate-500/30 focus:outline-none focus:border-indigo-400 placeholder-slate-500 transition-all"
                 />
                 <button
                   onClick={handleSend}
                   disabled={loading}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-pink-400 hover:text-pink-300 disabled:opacity-50 p-2 hover:animate-pulse"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-indigo-400 disabled:opacity-50 p-2 transition-colors"
                 >
                   <Send
-                    size={24}
-                    className="hover:rotate-12 transition-transform"
+                    size={20}
+                    className="hover:translate-x-0.5 transition-transform"
                   />
                 </button>
               </div>
@@ -235,68 +192,59 @@ const TodoChatApp = () => {
           </div>
         </div>
 
-        {/* Updated Todo List Section */}
-        <div className="w-96 flex flex-col bg-gray-900/80 rounded-2xl border-2 border-green-400/30 backdrop-blur-lg">
-          <div className="p-4 bg-green-900/50 border-b border-green-500/30">
+        {/* Todo List Section */}
+        <div className="w-96 flex flex-col bg-slate-800/90 rounded-2xl border border-slate-600/50 backdrop-blur-lg shadow-xl">
+          <div className="p-4 bg-slate-700/50 border-b border-slate-600/50">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Sparkles
-                  className="text-green-400 animate-twinkle"
-                  size={24}
-                />
-                <h2 className="text-xl font-bold bg-gradient-to-r from-green-400 to-yellow-400 bg-clip-text text-transparent">
-                  Your Sisyphean Tasks
+                <div className="p-2 rounded-lg bg-emerald-500/20 border border-emerald-400/30">
+                  <Sparkles className="text-emerald-400" size={20} />
+                </div>
+                <h2 className="text-lg font-semibold text-slate-100">
+                  Task Arena
                 </h2>
               </div>
-              <span className="bg-green-500/20 text-green-400 text-sm px-3 py-1 rounded-full border border-green-500/30">
-                {todos.length} {todos.length === 1 ? "regret" : "regrets"}
+              <span className="bg-emerald-500/20 text-emerald-400 text-sm px-3 py-1 rounded-full border border-emerald-400/30">
+                {todos.length} {todos.length === 1 ? "Challenge" : "Challenges"}
               </span>
             </div>
           </div>
 
           <div className="flex-1 overflow-y-auto p-4">
-            <div className="space-y-3">
-              {todos.map((todo) => (
-                <div
-                  key={todo.id}
-                  className="group flex items-center gap-3 p-3 bg-gray-800/30 rounded-xl border-2 border-green-500/20 hover:border-green-400/50 transition-all hover:scale-[1.02]"
+            {todos.map((todoItem) => (
+              <div
+                key={todoItem._id}
+                className="group flex items-center gap-3 p-3 bg-slate-700/20 rounded-lg"
+              >
+                <button
+                  onClick={() => handleToggle(todoItem._id)}
+                  className="text-emerald-400/50 hover:text-emerald-400"
                 >
-                  <button
-                    onClick={() => toggleTodo(todo.id)}
-                    className="text-green-400/50 hover:text-green-400 transition-colors"
+                  {todoItem.done ? (
+                    <CheckCircle size={20} />
+                  ) : (
+                    <Circle size={20} />
+                  )}
+                </button>
+                <div className="flex-1">
+                  <span
+                    className={`text-sm ${
+                      todoItem.done
+                        ? "line-through text-slate-500"
+                        : "text-slate-300"
+                    }`}
                   >
-                    {todo.done ? (
-                      <CheckCircle
-                        className="text-green-400 animate-pop"
-                        size={24}
-                      />
-                    ) : (
-                      <Circle size={24} className="hover:stroke-[3px]" />
-                    )}
-                  </button>
-                  <div className="flex-1">
-                    <span
-                      className={`text-sm ${
-                        todo.done
-                          ? "line-through text-green-400/50"
-                          : "text-green-200"
-                      }`}
-                    >
-                      {todo.text}
-                    </span>
-                    <div className="text-xs text-green-400/50 mt-1">
-                      Added: {todo.addedAt}
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => deleteTodo(todo.id)}
-                    className="opacity-0 group-hover:opacity-100 text-green-400/50 hover:text-red-400 transition-all"
-                  >
-                    <Trash2 size={18} className="hover:animate-shake" />
-                  </button>
+                    {todoItem.task}
+                  </span>
                 </div>
-              ))}
-            </div>
+                <button
+                  onClick={() => handleDelete(todoItem._id)}
+                  className="text-slate-500 hover:text-red-400"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
+            ))}
           </div>
         </div>
       </div>

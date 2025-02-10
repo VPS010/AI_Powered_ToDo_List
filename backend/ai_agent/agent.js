@@ -2,8 +2,10 @@ const { GoogleGenerativeAI } = require("@google/generative-ai");
 const todoTools = require("../tools/aiTools");
 const SYSTEM_PROMPT = require("../tools/sysPrompt");
 const readline = require("readline");
+const validTools = ['getalltodos', 'createtodo', 'searchtodo', 'deletetodo', 'toggletodo'];
 
 class TodoAIChat {
+
     constructor() {
         this.genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
         this.model = this.initializeModel();
@@ -95,6 +97,76 @@ class TodoAIChat {
         ];
     }
 
+    createObservation(toolName, result) {
+        const observations = {
+            getalltodos: {
+                type: "observation",
+                content: {
+                    source: "getalltodos",
+                    count: result.data?.length || 0,
+                    todos: result.data || []
+                }
+            },
+            toggletodo: {
+                type: "observation",
+                content: {
+                    source: "toggletodo",
+                    todo: result.data || {}
+                }
+            },
+            createtodo: {
+                type: "observation",
+                content: {
+                    source: "createtodo",
+                    createdId: result.data?.id || 'unknown'
+                }
+            },
+            deletetodo: {
+                type: "observation",
+                content: {
+                    source: "deletetodo",
+                    deletedId: result.data?.id || 'unknown'
+                }
+            }
+        };
+
+        return observations[toolName] || {
+            type: "observation",
+            content: result
+        };
+    }
+
+    sanitizeResult(result) {
+        // Handle array results
+        if (result.data && Array.isArray(result.data)) {
+            return {
+                ...result,
+                data: result.data.map(item => ({
+                    ...item,
+                    _id: item._id ? item._id.toString() : 'invalid-id',
+                    createdAt: new Date(item.createdAt).toISOString(),
+                    updatedAt: new Date(item.updatedAt).toISOString()
+                }))
+            };
+        }
+
+        // Handle single object results
+        if (result.data && typeof result.data === 'object') {
+            return {
+                ...result,
+                data: {
+                    ...result.data,
+                    _id: result.data._id ? result.data._id.toString() : 'invalid-id',
+                    createdAt: new Date(result.data.createdAt).toISOString(),
+                    updatedAt: new Date(result.data.updatedAt).toISOString()
+                }
+            };
+        }
+
+        return result;
+    }
+
+
     async getUserInput(query) {
         return new Promise((resolve) => {
             this.rl.question(query, (answer) => {
@@ -144,148 +216,154 @@ class TodoAIChat {
     async handleFunctionCall(chat, name, args) {
         console.log(`⚙️ Calling function: ${name}`, args);
         try {
+            if (!validTools.includes(name)) {
+                throw new Error(`Invalid function call: ${name}`);
+            }
+
             const result = await todoTools[name](args);
             console.log(`✅ Function result:`, result);
-            const functionResponsePart = {
-                functionResponse: {
-                    name: name,
-                    response: {
-                        content: result,
-                    },
-                },
-            };
-            const response = await chat.sendMessage([functionResponsePart]);
+
+            // Convert MongoDB data to plain objects
+            const sanitizedResult = this.sanitizeResult(result);
+
+            // Create observation message
+            const observation = this.createObservation(name, sanitizedResult);
+
+            // Send observation to continue conversation
+            const response = await chat.sendMessage([{
+                text: JSON.stringify(observation)
+            }]);
+
             return response;
         } catch (error) {
             console.error(`❌ Function error:`, error);
-            const errorPart = {
+            await chat.sendMessage([{
                 text: JSON.stringify({
                     type: "error",
-                    content: { error: error.message || "Unknown error" },
-                }),
-            };
-            await chat.sendMessage([errorPart]);
+                    content: { message: error.message }
+                })
+            }]);
             throw error;
         }
     }
 
-    async processResponse(chat, response) {
-        if (!response.candidates?.[0]?.content?.parts) return;
+    sanitizeResult(result) {
+        if (result.data && Array.isArray(result.data)) {
+            return {
+                ...result,
+                data: result.data.map(item => ({
+                    ...item,
+                    _id: item._id.toString(),
+                    createdAt: item.createdAt.toISOString(),
+                    updatedAt: item.updatedAt.toISOString()
+                }))
+            };
+        }
+        return result;
+    }
 
-        for (const part of response.candidates[0].content.parts) {
-            try {
+
+    async handleToolCall(toolName, parameters) {
+        console.log(`⚙️ Calling function: ${toolName}`, parameters);
+        try {
+            const result = await todoTools[toolName](parameters);
+            console.log(`✅ Function result:`, result);
+            return result;
+        } catch (error) {
+            console.error(`❌ Function error:`, error);
+            return { status: 'error', message: error.message };
+        }
+    }
+
+    async processResponse(chat, response) {
+        let finalOutput = '';
+        let requiresUpdate = false;
+
+        try {
+            const parts = response.candidates?.[0]?.content?.parts || [];
+            for (const part of parts) {
                 if (part.text) {
                     const parsedResponses = this.parseResponse(part.text);
-                    const responsesArray = Array.isArray(parsedResponses)
-                        ? parsedResponses
-                        : [parsedResponses];
+                    for (const parsed of parsedResponses) {
+                        await this.handleResponseTypes(parsed);
 
-                    for (const parsed of responsesArray) {
-                        if (
-                            parsed.type === "action" &&
-                            parsed.content.tool
-                        ) {
-                            console.log(
-                                "Detected action:",
-                                parsed.content.tool
-                            );
-                            const result = await todoTools[
-                                parsed.content.tool
-                            ](parsed.content.parameters || {});
-                            console.log("Tool result:", result);
-
-                            // Modify this section in processResponse()
-                            // In the getalltodos handling block:
-                            if (parsed.content.tool === "getalltodos" && result.status === "success") {
-                                // Convert to plain objects with string dates
-                                const sanitizedData = result.data.map(item => ({
-                                    ...item,
-                                    createdAt: new Date(item.createdAt).toISOString(),
-                                    updatedAt: new Date(item.updatedAt).toISOString()
-                                }));
-
-                                // Send FULL observation with explicit count
-                                const obsResponse = await chat.sendMessage([{
-                                    text: JSON.stringify({
-                                        type: "observation",
-                                        content: {
-                                            source: "getalltodos",
-                                            count: sanitizedData.length,
-                                            todos: sanitizedData // Send full array
-                                        }
-                                    })
-                                }]);
-
-                                // Process AI's response to the observation
-                                await this.processResponse(chat, obsResponse.response);
-
-
-                                continue;
-                            }
-
-                            if (parsed.content.tool === "toggletodo" && result.status === "success") {
-                                const obsResponse = await chat.sendMessage([{
-                                    text: JSON.stringify({
-                                        type: "observation",
-                                        content: {
-                                            source: "toggletodo",
-                                            message: result.message,
-                                            todo: {
-                                                id: result.data.id,
-                                                task: result.data.task,
-                                                done: result.data.done
-                                            }
-                                        }
-                                    })
-                                }]);
-                                await this.processResponse(chat, obsResponse.response);
-                                continue;
-                            }
-
-                            if (
-                                parsed.content.tool === "searchtodo" &&
-                                result.status === "success"
-                            ) {
-                                const obsResponse = await chat.sendMessage([
-                                    {
-                                        text: JSON.stringify({
-                                            type: "observation",
-                                            content: {
-                                                id: result.data._id,
-                                                result: result.data,
-                                            },
-                                        }),
-                                    },
-                                ]);
-                                await this.processResponse(chat, obsResponse.response);
-                                continue;
-                            }
-
-                            if (parsed.content.tool === "deletetodo") {
-                                const deleteResult = await todoTools.deletetodo({
-                                    id: result.data._id,
-                                });
-                                const obsResponse = await chat.sendMessage([
-                                    {
-                                        text: JSON.stringify({
-                                            type: "observation",
-                                            content: {
-                                                message: deleteResult.message,
-                                            },
-                                        }),
-                                    },
-                                ]);
-                                await this.processResponse(chat, obsResponse.response);
-                                continue;
+                        if (parsed.type === "action" && parsed.content.tool) {
+                            try {
+                                await this.handleFunctionCall(
+                                    chat,
+                                    parsed.content.tool,
+                                    parsed.content.parameters
+                                );
+                                requiresUpdate = true;
+                            } catch (error) {
+                                console.error('Function call failed:', error);
+                                finalOutput = "Oops! That action failed. Maybe try a different approach?";
                             }
                         }
-                        await this.handleResponseTypes(parsed);
+
+                        if (parsed.type === "output") {
+                            finalOutput = parsed.content.message;
+                        }
                     }
                 }
-            } catch (error) {
-                console.error("🚨 Response Processing Error:", error);
             }
+        } catch (error) {
+            console.error('🚨 Response Processing Error:', error);
+            finalOutput = "Yikes! Something went sideways. Maybe try a different approach?";
         }
+
+        return { finalOutput, requiresUpdate };
+    }
+
+
+    async processUserInput(input, history) {
+        try {
+            const chat = await this.createNewChat(history);
+            const result = await chat.sendMessage([{
+                text: JSON.stringify({
+                    type: "user_input",
+                    content: { message: input }
+                })
+            }]);
+
+            const response = await this.processResponse(chat, result.response);
+            return {
+                message: response.finalOutput,
+                requiresUpdate: response.requiresUpdate
+            };
+
+        } catch (error) {
+            console.error("Processing error:", error);
+            return {
+                message: "Let me try that again... What was that you wanted?",
+                requiresUpdate: false
+            };
+        }
+    }
+
+
+    async createNewChat(history) {
+        // Convert stored history to proper role structure
+        const rebuiltHistory = history.map(msg => ({
+            role: msg.role === "ai" ? "model" : msg.role, // Convert 'ai' to 'model'
+            parts: [{ text: msg.content }]
+        }));
+
+        return this.model.startChat({
+            history: [
+                {
+                    role: "user",
+                    parts: [{ text: `System: ${SYSTEM_PROMPT}` }]
+                },
+                {
+                    role: "model",
+                    parts: [{ text: JSON.stringify({ type: "start", content: { status: "initialized" } }) }]
+                },
+                ...rebuiltHistory
+            ],
+            generationConfig: { maxOutputTokens: 2000, temperature: 0.9 },
+            tools: this.tools
+        });
     }
 
     parseResponse(text) {
