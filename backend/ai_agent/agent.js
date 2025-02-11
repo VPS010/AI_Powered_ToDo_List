@@ -247,20 +247,7 @@ class TodoAIChat {
         }
     }
 
-    sanitizeResult(result) {
-        if (result.data && Array.isArray(result.data)) {
-            return {
-                ...result,
-                data: result.data.map(item => ({
-                    ...item,
-                    _id: item._id.toString(),
-                    createdAt: item.createdAt.toISOString(),
-                    updatedAt: item.updatedAt.toISOString()
-                }))
-            };
-        }
-        return result;
-    }
+
 
 
     async handleToolCall(toolName, parameters) {
@@ -274,6 +261,8 @@ class TodoAIChat {
             return { status: 'error', message: error.message };
         }
     }
+
+    
     async processResponse(chat, response, onPartialResponse) {
         let finalOutput = '';
         let requiresUpdate = false;
@@ -413,28 +402,42 @@ class TodoAIChat {
             };
         }
     }
-    async handleResponseTypes(response, onPartialResponse) {
+
+    async handleResponseTypes(response) {
         switch (response.type) {
             case "plan":
                 console.log("📝 Plan:", response.content.description);
                 break;
-
+            case "action":
+                console.log("🛠️ Action Required:", response.content.tool);
+                break;
             case "observation":
+                console.log("🔍 Full Observation:", response.content);
+
                 if (response.content.source === "getalltodos") {
+                    // Directly generate output from data
                     const count = response.content.count;
                     const tasks = response.content.todos.map(t => `- ${t.task}`).join('\n');
-                    const message = `You have ${count} todos:\n${tasks}`;
-                    onPartialResponse?.({ message });
-                    return message;
+
+                    console.log(`💬 Final Response: You have ${count} todos:\n${tasks}`);
+                } else if (response.content.source === "toggletodo") {
+                    const status = response.content.todo.done ? "completed" : "uncompleted";
+                    console.log(`💬 Final Response: Todo "${response.content.todo.task}" marked as ${status}`);
                 }
-                // Handle other observation types
                 break;
-
             case "output":
-                return response.content.message;
-
+                console.log(
+                    `💬 Final Response: ${response.content.message}`
+                );
+                break;
+            case "error":
+                console.error(
+                    "❌ Error:",
+                    response.content.error || response.content.message
+                );
+                break;
             default:
-                return '';
+                console.log("Received:", response);
         }
     }
 
