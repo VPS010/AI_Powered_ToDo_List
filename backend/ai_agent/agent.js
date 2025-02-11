@@ -274,39 +274,49 @@ class TodoAIChat {
             return { status: 'error', message: error.message };
         }
     }
-
-    async processResponse(chat, response) {
+    async processResponse(chat, response, onPartialResponse) {
         let finalOutput = '';
         let requiresUpdate = false;
 
         try {
-            const parts = response.candidates?.[0]?.content?.parts || [];
-            for (const part of parts) {
+            const processPart = async (part) => {
                 if (part.text) {
                     const parsedResponses = this.parseResponse(part.text);
                     for (const parsed of parsedResponses) {
-                        await this.handleResponseTypes(parsed);
-
-                        if (parsed.type === "action" && parsed.content.tool) {
-                            try {
-                                await this.handleFunctionCall(
-                                    chat,
-                                    parsed.content.tool,
-                                    parsed.content.parameters
-                                );
-                                requiresUpdate = true;
-                            } catch (error) {
-                                console.error('Function call failed:', error);
-                                finalOutput = "Oops! That action failed. Maybe try a different approach?";
-                            }
-                        }
-
+                        // Handle immediate responses
                         if (parsed.type === "output") {
                             finalOutput = parsed.content.message;
+                            onPartialResponse?.(parsed.content);
+                        }
+
+                        // Handle function calls
+                        if (parsed.type === "action" && parsed.content.tool) {
+                            const result = await this.handleFunctionCall(
+                                chat,
+                                parsed.content.tool,
+                                parsed.content.parameters
+                            );
+                            requiresUpdate = true;
+
+                            // Process subsequent responses recursively
+                            if (result && result.response) {
+                                const subResponse = await this.processResponse(
+                                    chat,
+                                    result.response,
+                                    onPartialResponse
+                                );
+                                finalOutput = subResponse.finalOutput || finalOutput;
+                            }
                         }
                     }
                 }
+            };
+
+            const parts = response.candidates?.[0]?.content?.parts || [];
+            for (const part of parts) {
+                await processPart(part);
             }
+
         } catch (error) {
             console.error('🚨 Response Processing Error:', error);
             finalOutput = "Yikes! Something went sideways. Maybe try a different approach?";
@@ -314,7 +324,6 @@ class TodoAIChat {
 
         return { finalOutput, requiresUpdate };
     }
-
 
     async processUserInput(input, history) {
         try {
@@ -404,42 +413,28 @@ class TodoAIChat {
             };
         }
     }
-
-    async handleResponseTypes(response) {
+    async handleResponseTypes(response, onPartialResponse) {
         switch (response.type) {
             case "plan":
                 console.log("📝 Plan:", response.content.description);
                 break;
-            case "action":
-                console.log("🛠️ Action Required:", response.content.tool);
-                break;
-            case "observation":
-                console.log("🔍 Full Observation:", response.content);
 
+            case "observation":
                 if (response.content.source === "getalltodos") {
-                    // Directly generate output from data
                     const count = response.content.count;
                     const tasks = response.content.todos.map(t => `- ${t.task}`).join('\n');
-
-                    console.log(`💬 Final Response: You have ${count} todos:\n${tasks}`);
-                } else if (response.content.source === "toggletodo") {
-                    const status = response.content.todo.done ? "completed" : "uncompleted";
-                    console.log(`💬 Final Response: Todo "${response.content.todo.task}" marked as ${status}`);
+                    const message = `You have ${count} todos:\n${tasks}`;
+                    onPartialResponse?.({ message });
+                    return message;
                 }
+                // Handle other observation types
                 break;
+
             case "output":
-                console.log(
-                    `💬 Final Response: ${response.content.message}`
-                );
-                break;
-            case "error":
-                console.error(
-                    "❌ Error:",
-                    response.content.error || response.content.message
-                );
-                break;
+                return response.content.message;
+
             default:
-                console.log("Received:", response);
+                return '';
         }
     }
 

@@ -43,24 +43,46 @@ io.on("connection", (socket) => {
     socket.on("message", async (message) => {
         try {
             const session = sessions.get(socket.id);
-            const aiResponse = await todoAI.processUserInput(message, session.history);
+            const chat = await todoAI.createNewChat(session.history);
 
-            // Store with proper roles
+            // Send user message
+            const result = await chat.sendMessage([{
+                text: JSON.stringify({
+                    type: "user_input",
+                    content: { message: message }
+                })
+            }]);
+
+            // Process initial response
+            const { finalOutput, requiresUpdate } = await todoAI.processResponse(
+                chat,
+                result.response,
+                (response) => {
+                    // Send intermediate responses to client
+                    socket.emit("response", {
+                        type: "response",
+                        content: response
+                    });
+                }
+            );
+
+            // Store history with proper roles
             session.history.push({
                 role: "user",
-                content: JSON.stringify({ type: "user_input", content: message })
+                content: message
             });
             session.history.push({
-                role: "model",
-                content: JSON.stringify({ type: "output", content: { message: aiResponse.message } })
+                role: "ai",
+                content: finalOutput
             });
 
+            // Send final response
             socket.emit("response", {
                 type: "response",
-                content: aiResponse
+                content: { message: finalOutput }
             });
 
-            if (aiResponse.requiresUpdate) {
+            if (requiresUpdate) {
                 const todos = await todo.find({});
                 io.emit("todoUpdated", todos);
             }
