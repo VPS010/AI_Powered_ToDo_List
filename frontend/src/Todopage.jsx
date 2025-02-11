@@ -10,10 +10,7 @@ import ChatInput from "./components/ChatInput";
 import TodoHeader from "./components/TodoHeader";
 import TodoList from "./components/TodoList";
 
-// Get base URL from environment variable
 const BASE_URL = import.meta.env.VITE_API_BASE_URL;
-
-// Initialize socket with base URL
 const socket = io(BASE_URL);
 
 const TodoChatApp = () => {
@@ -21,6 +18,7 @@ const TodoChatApp = () => {
   const [input, setInput] = useState("");
   const [todos, setTodos] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [showTodoList, setShowTodoList] = useState(false);
   const chatEndRef = useRef(null);
 
   const scrollToBottom = () => {
@@ -120,13 +118,25 @@ const TodoChatApp = () => {
 
   return (
     <div className="flex h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-purple-950 animate-gradient-x">
-      <div className="flex-1 flex p-4 gap-6">
+      <div className="flex-1 flex flex-col md:flex-row p-2 md:p-4 gap-2 md:gap-6">
+        {/* Mobile Toggle Button */}
+        <button
+          className="md:hidden w-full mb-2 py-2 px-4 bg-purple-600 text-white rounded-lg font-medium"
+          onClick={() => setShowTodoList(!showTodoList)}
+        >
+          {showTodoList ? "Show Chat" : `Show Todo List (${todos.length})`}
+        </button>
+
         {/* Chat Section */}
-        <div className="flex-1 flex flex-col bg-gray-900/80 rounded-2xl overflow-hidden border-2 border-purple-500/30 backdrop-blur-lg">
+        <div
+          className={`flex-1 flex flex-col bg-gray-900/80 rounded-2xl overflow-hidden border-2 border-purple-500/30 backdrop-blur-lg ${
+            showTodoList ? "hidden md:flex" : "flex"
+          }`}
+        >
           <ChatHeader />
 
           {/* Chat Messages */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          <div className="flex-1 overflow-y-auto p-2 md:p-4 space-y-4">
             {messages.map((message, index) => (
               <ChatMessage key={index} message={message} />
             ))}
@@ -143,7 +153,11 @@ const TodoChatApp = () => {
         </div>
 
         {/* Todo List Section */}
-        <div className="w-96 flex flex-col bg-gray-900/80 rounded-2xl border-2 border-green-400/30 backdrop-blur-lg">
+        <div
+          className={`w-full md:w-96 flex flex-col bg-gray-900/80 rounded-2xl border-2 border-green-400/30 backdrop-blur-lg ${
+            showTodoList ? "flex" : "hidden md:flex"
+          }`}
+        >
           <TodoHeader todoCount={todos.length} />
           <TodoList
             todos={todos}
