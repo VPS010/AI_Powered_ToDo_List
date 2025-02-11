@@ -154,7 +154,7 @@ const TodoChatApp = () => {
 
         {/* Todo List Section */}
         <div
-          className={`w-full md:w-96 flex flex-col bg-gray-900/80 rounded-2xl border-2 border-green-400/30 backdrop-blur-lg ${
+          className={`h-[90%] md:h-full  md:w-96 flex flex-col bg-gray-900/80 rounded-2xl border-2 border-green-400/30 backdrop-blur-lg ${
             showTodoList ? "flex" : "hidden md:flex"
           }`}
         >
