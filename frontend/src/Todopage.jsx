@@ -54,7 +54,7 @@ const TodoChatApp = () => {
             "🤪",
             "😤",
             "😒",
-          ][Math.floor(Math.random() * 12)],
+          ][Math.floor(Math.random() * 11)],
           timestamp: new Date().toLocaleTimeString(),
         },
       ]);
