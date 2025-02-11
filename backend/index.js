@@ -12,7 +12,7 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
-        origin: "http://localhost:5173",
+        origin: process.env.FRONTEND_URL,
         methods: ["GET", "POST"]
     }
 });
@@ -77,10 +77,6 @@ io.on("connection", (socket) => {
             });
 
             // Send final response
-            socket.emit("response", {
-                type: "response",
-                content: { message: finalOutput }
-            });
 
             if (requiresUpdate) {
                 const todos = await todo.find({});

@@ -1,11 +1,12 @@
 const { todo } = require("../db/modle");
 const { ObjectId } = require('mongodb');
 
+// Modify getalltodos tool to always refresh
 const getalltodos = async () => {
     try {
-        console.log("Fetching all todos");
+        console.log("Fetching fresh todos from DB");
         const todos = await todo.find({})
-            .lean({ virtuals: true })  // Enable virtuals
+            .lean({ virtuals: true })
             .setOptions({ sanitizeFilter: true })
             .exec();
 
@@ -13,16 +14,14 @@ const getalltodos = async () => {
             status: 'success',
             data: todos.map(t => ({
                 ...t,
-                createdAt: t.createdAt,
-                updatedAt: t.updatedAt
+                _id: t._id.toString(), // Ensure string ID
+                createdAt: t.createdAt.toISOString(),
+                updatedAt: t.updatedAt.toISOString()
             }))
         };
     } catch (error) {
         console.error("Error fetching todos:", error);
-        return {
-            status: 'error',
-            message: error.message
-        };
+        return { status: 'error', message: error.message };
     }
 };
 

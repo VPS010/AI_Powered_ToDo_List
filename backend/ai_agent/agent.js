@@ -125,7 +125,7 @@ class TodoAIChat {
                 type: "observation",
                 content: {
                     source: "deletetodo",
-                    deletedId: result.data?.id || 'unknown'
+                    deletedId: result.data || 'unknown' // Changed from result.data?.id
                 }
             }
         };
@@ -136,6 +136,9 @@ class TodoAIChat {
         };
     }
 
+
+
+
     sanitizeResult(result) {
         // Handle array results
         if (result.data && Array.isArray(result.data)) {
@@ -144,8 +147,8 @@ class TodoAIChat {
                 data: result.data.map(item => ({
                     ...item,
                     _id: item._id ? item._id.toString() : 'invalid-id',
-                    createdAt: new Date(item.createdAt).toISOString(),
-                    updatedAt: new Date(item.updatedAt).toISOString()
+                    createdAt: item.createdAt ? new Date(item.createdAt).toISOString() : undefined,
+                    updatedAt: item.updatedAt ? new Date(item.updatedAt).toISOString() : undefined
                 }))
             };
         }
@@ -157,15 +160,14 @@ class TodoAIChat {
                 data: {
                     ...result.data,
                     _id: result.data._id ? result.data._id.toString() : 'invalid-id',
-                    createdAt: new Date(result.data.createdAt).toISOString(),
-                    updatedAt: new Date(result.data.updatedAt).toISOString()
+                    createdAt: result.data.createdAt ? new Date(result.data.createdAt).toISOString() : undefined,
+                    updatedAt: result.data.updatedAt ? new Date(result.data.updatedAt).toISOString() : undefined
                 }
             };
         }
 
         return result;
     }
-
 
     async getUserInput(query) {
         return new Promise((resolve) => {
@@ -262,7 +264,7 @@ class TodoAIChat {
         }
     }
 
-    
+
     async processResponse(chat, response, onPartialResponse) {
         let finalOutput = '';
         let requiresUpdate = false;
@@ -276,6 +278,8 @@ class TodoAIChat {
                         if (parsed.type === "output") {
                             finalOutput = parsed.content.message;
                             onPartialResponse?.(parsed.content);
+                            // Prevent sending final output if we've already sent partials
+                            requiresUpdate = true;
                         }
 
                         // Handle function calls
