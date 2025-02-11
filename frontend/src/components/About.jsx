@@ -46,9 +46,13 @@ const About = ({ isOpen, onClose }) => {
             <strong>Features:</strong>
           </p>
           <ul>
-            <li>Real-time todo analysis and status updates</li>
-            <li>Create, delete, categorize, and prioritize tasks</li>
-            <li>Toggle task completion with a touch of sarcasm</li>
+            <li>- Real-time todo analysis and status updates</li>
+            <li>- Create, delete, categorize, and prioritize tasks using ai</li>
+            <li>- Toggle task completion with a touch of sarcasm</li>
+            <li>
+              - Also you can perform delete and Toggle task completion manualy
+              by UI
+            </li>
           </ul>
           <p>
             <strong>Note:</strong> Please note that all tasks are stored in a
