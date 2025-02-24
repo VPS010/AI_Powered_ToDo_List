@@ -1,7 +1,7 @@
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const todoTools = require("../tools/aiTools");
 const SYSTEM_PROMPT = require("../tools/sysPrompt");
-const readline = require("readline");
+
 const validTools = ['getalltodos', 'createtodo', 'searchtodo', 'deletetodo', 'toggletodo'];
 
 class TodoAIChat {
@@ -10,10 +10,6 @@ class TodoAIChat {
         this.genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
         this.model = this.initializeModel();
         this.tools = this.setupTools();
-        this.rl = readline.createInterface({
-            input: process.stdin,
-            output: process.stdout,
-        });
     }
 
     initializeModel() {
@@ -125,7 +121,7 @@ class TodoAIChat {
                 type: "observation",
                 content: {
                     source: "deletetodo",
-                    deletedId: result.data || 'unknown' // Changed from result.data?.id
+                    deletedId: result.data || 'unknown'
                 }
             }
         };
@@ -135,9 +131,6 @@ class TodoAIChat {
             content: result
         };
     }
-
-
-
 
     sanitizeResult(result) {
         // Handle array results
@@ -169,14 +162,6 @@ class TodoAIChat {
         return result;
     }
 
-    async getUserInput(query) {
-        return new Promise((resolve) => {
-            this.rl.question(query, (answer) => {
-                process.stdout.moveCursor(0, -1);
-                resolve(answer);
-            });
-        });
-    }
 
     startNewChat() {
         return this.model.startChat({
@@ -249,9 +234,6 @@ class TodoAIChat {
         }
     }
 
-
-
-
     async handleToolCall(toolName, parameters) {
         console.log(`⚙️ Calling function: ${toolName}`, parameters);
         try {
@@ -263,7 +245,6 @@ class TodoAIChat {
             return { status: 'error', message: error.message };
         }
     }
-
 
     async processResponse(chat, response, onPartialResponse) {
         let finalOutput = '';
@@ -278,7 +259,6 @@ class TodoAIChat {
                         if (parsed.type === "output") {
                             finalOutput = parsed.content.message;
                             onPartialResponse?.(parsed.content);
-                            // Prevent sending final output if we've already sent partials
                             requiresUpdate = true;
                         }
 
@@ -342,7 +322,6 @@ class TodoAIChat {
             };
         }
     }
-
 
     async createNewChat(history) {
         // Convert stored history to proper role structure
@@ -445,36 +424,6 @@ class TodoAIChat {
         }
     }
 
-    async startInteractiveLoop() {
-        console.log("Loop Started");
-        let chat = await this.startNewChat();
-        while (true) {
-            try {
-                const query = await this.getUserInput(">> ");
-                if (!query || query.toLowerCase() === "exit") {
-                    this.rl.close();
-                    break;
-                }
-                const result = await chat.sendMessage([
-                    {
-                        text: JSON.stringify({
-                            type: "user_input",
-                            content: { message: query },
-                        }),
-                    },
-                ]);
-                await this.processResponse(chat, result.response);
-            } catch (error) {
-                console.error("🚨 Error:", error);
-                if (
-                    error.message &&
-                    error.message.includes("SAFETY")
-                ) {
-                    console.log("⚠️ Content blocked by safety filters");
-                }
-            }
-        }
-    }
 }
 
 

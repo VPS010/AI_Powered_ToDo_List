@@ -29,6 +29,9 @@ const io = new Server(server, {
 // Session storage
 const sessions = new Map();
 
+//TodoAIChat instance
+const todoAI = new TodoAIChat();
+
 // WebSocket connection
 io.on("connection", (socket) => {
     console.log("New client connected:", socket.id);
@@ -133,8 +136,7 @@ app.put("/done/:id", async (req, res) => {
     }
 });
 
-// Modified TodoAIChat instance
-const todoAI = new TodoAIChat();
+
 
 server.listen(3000, () => {
     console.log(">> Server running on port 3000");
