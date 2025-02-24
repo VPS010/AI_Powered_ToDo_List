@@ -10,6 +10,14 @@ const cors = require("cors");
 dotenv.config();
 const app = express();
 const server = http.createServer(app);
+connectDB();
+app.use(express.json());
+
+app.use(cors({
+    origin: [process.env.FRONTEND_URL],
+    credentials: true
+}));
+
 const io = new Server(server, {
     cors: {
         origin: process.env.FRONTEND_URL,
@@ -17,9 +25,6 @@ const io = new Server(server, {
     }
 });
 
-connectDB();
-app.use(cors());
-app.use(express.json());
 
 // Session storage
 const sessions = new Map();
@@ -72,7 +77,7 @@ io.on("connection", (socket) => {
                 content: message
             });
             session.history.push({
-                role: "ai",
+                role: "model",
                 content: finalOutput
             });
 

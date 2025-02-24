@@ -347,7 +347,7 @@ class TodoAIChat {
     async createNewChat(history) {
         // Convert stored history to proper role structure
         const rebuiltHistory = history.map(msg => ({
-            role: msg.role === "ai" ? "model" : msg.role, // Convert 'ai' to 'model'
+            role: msg.role,
             parts: [{ text: msg.content }]
         }));
 
