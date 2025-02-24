@@ -162,59 +162,26 @@ class TodoAIChat {
         return result;
     }
 
-
-    startNewChat() {
-        return this.model.startChat({
-            history: [
-                {
-                    role: "user",
-                    parts: [
-                        {
-                            text:
-                                "System: Initialize with the following configuration:" +
-                                SYSTEM_PROMPT,
-                        },
-                    ],
-                },
-                {
-                    role: "model",
-                    parts: [
-                        {
-                            text: JSON.stringify({
-                                type: "start",
-                                content: {
-                                    status: "initialized",
-                                    message:
-                                        "Ready to help with todos in a sarcastic way!",
-                                },
-                            }),
-                        },
-                    ],
-                },
-            ],
-            generationConfig: {
-                maxOutputTokens: 2000,
-                temperature: 0.9,
-            },
-            tools: this.tools,
-        });
-    }
-
     async handleFunctionCall(chat, name, args) {
-        console.log(`⚙️ Calling function: ${name}`, args);
+        console.log(`⚙️ Calling function: ${name}`, args); // for debugging
         try {
             if (!validTools.includes(name)) {
                 throw new Error(`Invalid function call: ${name}`);
             }
 
             const result = await todoTools[name](args);
-            console.log(`✅ Function result:`, result);
+            console.log(`✅ Function result:`, result);  // for debugging
 
             // Convert MongoDB data to plain objects
             const sanitizedResult = this.sanitizeResult(result);
 
             // Create observation message
             const observation = this.createObservation(name, sanitizedResult);
+
+            // Validate observation
+            if (!observation || typeof observation !== 'object') {
+                throw new Error("Invalid observation generated");
+            }
 
             // Send observation to continue conversation
             const response = await chat.sendMessage([{
@@ -231,18 +198,6 @@ class TodoAIChat {
                 })
             }]);
             throw error;
-        }
-    }
-
-    async handleToolCall(toolName, parameters) {
-        console.log(`⚙️ Calling function: ${toolName}`, parameters);
-        try {
-            const result = await todoTools[toolName](parameters);
-            console.log(`✅ Function result:`, result);
-            return result;
-        } catch (error) {
-            console.error(`❌ Function error:`, error);
-            return { status: 'error', message: error.message };
         }
     }
 
@@ -299,6 +254,14 @@ class TodoAIChat {
     }
 
     async processUserInput(input, history) {
+        // Validate input
+        if (!input || typeof input !== 'string' || input.trim() === '') {
+            console.error("Invalid input: input must be a non-empty string");
+            return {
+                message: "Please provide a valid input.",
+                requiresUpdate: false
+            };
+        }
         try {
             const chat = await this.createNewChat(history);
             const result = await chat.sendMessage([{
@@ -313,7 +276,6 @@ class TodoAIChat {
                 message: response.finalOutput,
                 requiresUpdate: response.requiresUpdate
             };
-
         } catch (error) {
             console.error("Processing error:", error);
             return {
@@ -349,6 +311,15 @@ class TodoAIChat {
 
     parseResponse(text) {
         try {
+            // Validate input text
+            if (!text || typeof text !== 'string' || text.trim() === '') {
+                console.error("Empty or invalid response text");
+                return [{
+                    type: "error",
+                    content: { message: "Empty response received" }
+                }];
+            }
+
             // Remove code fence markers
             let cleanedText = text.replace(/```(json)?/g, "").trim();
 
@@ -362,69 +333,28 @@ class TodoAIChat {
                     try {
                         results.push(JSON.parse(jsonString));
                     } catch (error) {
-                        console.error(
-                            "Failed to parse JSON block:",
-                            jsonString,
-                            error
-                        );
+                        console.error("Failed to parse JSON block:", jsonString, error);
                     }
                 }
-                return results;
+                return results.length > 0 ? results : [{
+                    type: "error",
+                    content: { message: "No valid JSON found in response" }
+                }];
             }
 
             console.error("No JSON blocks found in response:", text);
-            return {
+            return [{
                 type: "error",
-                content: { message: "Invalid response format" },
-            };
+                content: { message: "Invalid response format" }
+            }];
         } catch (error) {
             console.error("Failed to parse response:", text, error);
-            return {
+            return [{
                 type: "error",
-                content: { message: "Invalid response format" },
-            };
+                content: { message: "Invalid response format" }
+            }];
         }
     }
-
-    async handleResponseTypes(response) {
-        switch (response.type) {
-            case "plan":
-                console.log("📝 Plan:", response.content.description);
-                break;
-            case "action":
-                console.log("🛠️ Action Required:", response.content.tool);
-                break;
-            case "observation":
-                console.log("🔍 Full Observation:", response.content);
-
-                if (response.content.source === "getalltodos") {
-                    // Directly generate output from data
-                    const count = response.content.count;
-                    const tasks = response.content.todos.map(t => `- ${t.task}`).join('\n');
-
-                    console.log(`💬 Final Response: You have ${count} todos:\n${tasks}`);
-                } else if (response.content.source === "toggletodo") {
-                    const status = response.content.todo.done ? "completed" : "uncompleted";
-                    console.log(`💬 Final Response: Todo "${response.content.todo.task}" marked as ${status}`);
-                }
-                break;
-            case "output":
-                console.log(
-                    `💬 Final Response: ${response.content.message}`
-                );
-                break;
-            case "error":
-                console.error(
-                    "❌ Error:",
-                    response.content.error || response.content.message
-                );
-                break;
-            default:
-                console.log("Received:", response);
-        }
-    }
-
 }
-
 
 module.exports = { TodoAIChat }

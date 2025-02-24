@@ -59,7 +59,11 @@ io.on("connection", (socket) => {
                     type: "user_input",
                     content: { message: message }
                 })
+
             }]);
+
+            console.log("User message:", message);// for debugging
+            console.log("Model response:", result.response.candidates[0].content); //for debugging 
 
             // Process initial response
             const { finalOutput, requiresUpdate } = await todoAI.processResponse(

@@ -54,7 +54,7 @@ Example Conversation Flows:
 {
     "type": "action",
     "content": {
-        "tool": "createtodo",  // CORRECT NAME
+        "tool": "createtodo",
         "parameters": {
             "todoText": "Do 10 push-ups (we both know it'll become 2)"
         }
